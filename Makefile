@@ -14,10 +14,15 @@ help:
 	@echo "  clean        - Clean build artifacts"
 	@echo "  ci           - Full CI pipeline (clean, compile, test, package)"
 	@echo ""
-	@echo "Azure Deployment:"
-	@echo "  github-push  - Build and push Docker image to GitHub Container Registry"
-	@echo "  az-deploy    - Login to Azure and deploy to Container Apps (prompts for subscription/RG)"
-	@echo "  deploy-all   - Full deployment pipeline (github-push + az-deploy)"
+	@echo "Azure & Registry:"
+	@echo "  az-login         - Login to Azure CLI"
+	@echo "  acr-push         - Build and push to ACR (creates ACR if needed)"
+	@echo "  azdeploy         - Deploy infrastructure and assign ACR permissions"
+	@echo "  acr-full-deploy  - Complete pipeline: create ACR, push, deploy, assign permissions"
+	@echo "  local-push       - Build and push Docker image to local registry (localhost:5000)"
+	@echo "  github-push    - Build and push Docker image to GitHub Container Registry"
+	@echo "  az-deploy      - Login to Azure and deploy to Container Apps (prompts for subscription/RG)"
+	@echo "  deploy-all     - Full deployment pipeline (github-push + az-deploy)"
 	@echo ""
 	@echo "  help         - Show this help message"
 
@@ -76,29 +81,49 @@ ci: clean compile package
 	@echo "CI pipeline completed successfully!"
 
 # Azure deployment command (login + deploy)
-az-deploy:
-	@echo "Azure Login and Deployment..."
-	@echo "Logging into Azure..."
-	az login
-	@echo "You will be prompted for Azure configuration..."
-	@read -p "Subscription ID: " SUBSCRIPTION_ID; \
-	read -p "Resource Group Name: " RESOURCE_GROUP; \
-	echo "Setting subscription to $$SUBSCRIPTION_ID..."; \
-	az account set --subscription "$$SUBSCRIPTION_ID"; \
-	echo "Deploying to resource group $$RESOURCE_GROUP..."; \
+azdeploy:
+	@read -p "Resource Group Name: " RESOURCE_GROUP; \
+	read -p "Enter your ACR name (acrlag): " ACR_NAME; \
 	az deployment group create \
 		--resource-group "$$RESOURCE_GROUP" \
 		--template-file deploy/bicep/main.bicep \
-		--parameters @deploy/bicep/param.json
+		--parameters @deploy/bicep/param.json \
+		--parameters AcrName=$$ACR_NAME; \
+	echo "✅ Deployment completed successfully!"; \
 
-# Push to GitHub Container Registry
-github-push: docker-build
-	@echo "Pushing to GitHub Container Registry..."
-	@echo "Make sure you have GITHUB_TOKEN set and are logged in!"
-	docker tag eventhub-custom-metrics-emitter-java:latest ghcr.io/azure-samples-java/eventhub-custom-metrics-emitter-java:latest
-	docker push ghcr.io/azure-samples-java/eventhub-custom-metrics-emitter-java:latest
-	@echo "Image pushed to ghcr.io/azure-samples-java/eventhub-custom-metrics-emitter-java:latest"
+# Azure Login
+az-login:
+	@echo "Logging into Azure..."
+	az login
 
-# Build, push, and deploy (full pipeline)
-deploy-all: github-push az-deploy
-	@echo "Full deployment pipeline completed successfully!"
+# Push to Azure Container Registry (ACR) - creates ACR if needed
+acr-push:
+	@echo "Pushing to Azure Container Registry..."
+	@read -p "Enter your ACR name: " ACR_NAME; \
+	read -p "Enter Resource Group: " RESOURCE_GROUP; \
+	RESOURCE_GROUP=$${RESOURCE_GROUP:-eh-lag-metric-rg}; \
+	read -p "Enter Location (uksouth): " LOCATION; \
+	LOCATION=$${LOCATION:-uksouth}; \
+	echo "=== STEP 1: CREATE/VERIFY ACR ==="; \
+	echo "Checking if ACR $$ACR_NAME exists in resource group $$RESOURCE_GROUP..."; \
+	if ! az acr show --name $$ACR_NAME --resource-group $$RESOURCE_GROUP >/dev/null 2>&1; then \
+		echo "ACR $$ACR_NAME not found. Creating it..."; \
+		az acr create --name $$ACR_NAME --resource-group $$RESOURCE_GROUP --location $$LOCATION --sku Basic; \
+		echo "✅ ACR $$ACR_NAME created successfully"; \
+	else \
+		echo "✅ ACR $$ACR_NAME already exists"; \
+	fi; \
+	echo "=== STEP 2: ACR LOGIN ==="; \
+	az acr login --name $$ACR_NAME; \
+	echo "=== STEP 3: PUSH TO ACR ==="; \
+	echo "Tagging image for ACR: $$ACR_NAME.azurecr.io"; \
+	docker tag eventhub-custom-metrics-emitter-java:latest $$ACR_NAME.azurecr.io/eventhub-custom-metrics-emitter-java:latest; \
+	docker push $$ACR_NAME.azurecr.io/eventhub-custom-metrics-emitter-java:latest; \
+	echo "✅ Image pushed to $$ACR_NAME.azurecr.io/eventhub-custom-metrics-emitter-java:latest"
+
+# Push to local registry
+local-push: docker-build
+	@echo "Pushing to local registry..."
+	docker tag eventhub-custom-metrics-emitter-java:latest localhost:5000/eventhub-custom-metrics-emitter-java:latest
+	docker push localhost:5000/eventhub-custom-metrics-emitter-java:latest
+	@echo "Image pushed to localhost:5000/eventhub-custom-metrics-emitter-java:latest"

@@ -23,10 +23,29 @@ param managedIdentityName string
 @description('container app environment name from param.json file')
 param AcaEnvName string
 
+@description('Azure Container Registry name')
+param AcrName string
+
 // create a managed identity
 resource mngIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2022-01-31-preview' = {
   name: managedIdentityName  
   location: location
+}
+
+// reference the existing ACR (assumed to be in the same resource group)
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2021-09-01' existing = {
+  name: AcrName
+}
+
+// assign ACR Pull role to the managed identity
+resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid('AcrPull', mngIdentity.id, containerRegistry.id)
+  scope: containerRegistry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d') // AcrPull role
+    principalId: mngIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
 }
 
 // when using an existing managed identity, using the 'existing' keyword will not create a new one rather it will use the existing one
@@ -46,10 +65,12 @@ module roles 'roles.bicep' = {
 }
 
 
-// create aca resource
-
+// create aca resource (depends on ACR role assignment)
 module ACA 'aca.bicep' = {
   name: 'aca-emitter'
+  dependsOn: [
+    acrPullRoleAssignment  // Ensure ACR permissions are set before creating Container App
+  ]
   params: {
     location: location
     ManagedIdentityId: mngIdentity.id
@@ -60,10 +81,10 @@ module ACA 'aca.bicep' = {
     EventHubName: EventHubName
     CheckpointContainerName: CheckpointContainerName
     CustomMetricInterval: CustomMetricInterval
-    EmitterImage: 'azure-samples-java/eventhub-custom-metrics-emitter-java:latest'
-    registryLoginServer: 'ghcr.io'
+    EmitterImage: 'eventhub-custom-metrics-emitter-java:latest'
+    registryLoginServer: '${AcrName}.azurecr.io'
   }
 }
 
-
-
+// Output the managed identity principal ID for role assignments
+output managedIdentityPrincipalId string = mngIdentity.properties.principalId

@@ -50,3 +50,6 @@ resource MonitoringMetricPublisherAssignment 'Microsoft.Authorization/roleAssign
     principalType: 'ServicePrincipal'
   }
 }
+
+// ACR Pull role assignment - handled separately due to cross-resource-group scope limitations
+// This will be assigned via Azure CLI command after deployment
