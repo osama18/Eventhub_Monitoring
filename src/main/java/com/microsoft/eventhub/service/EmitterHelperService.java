@@ -4,6 +4,7 @@
 package com.microsoft.eventhub.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.microsoft.eventhub.model.EmitterSchema;
 import org.apache.http.HttpEntity;
@@ -40,6 +41,8 @@ public class EmitterHelperService {
         this.httpClient = HttpClients.createDefault();
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
+        // Serialize dates as ISO 8601 strings instead of timestamps
+        this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         this.tokenService = tokenService;
     }
     

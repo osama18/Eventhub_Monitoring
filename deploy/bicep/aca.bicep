@@ -98,7 +98,12 @@ resource ContainerApp 'Microsoft.App/containerApps@2022-06-01-preview' = {
     managedEnvironmentId: containerAppEnvironment.id
     
     configuration: {
-    
+      registries: [
+        {
+          server: registryLoginServer
+          identity: ManagedIdentityId
+        }
+      ]
     }
     template: {
       containers: [

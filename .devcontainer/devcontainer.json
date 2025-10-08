@@ -3,11 +3,15 @@
     "build": {
         "dockerfile": "Dockerfile"
     },
+    "features": {
+        "ghcr.io/devcontainers/features/azure-cli:1": {}
+    },
     "customizations": {
         "vscode": {
             "extensions": [
                 "vscjava.vscode-java-pack",
-                "ms-azuretools.vscode-docker"
+                "ms-azuretools.vscode-docker",
+                "ms-vscode.azure-account"
             ]
         }
     },
@@ -15,6 +19,6 @@
         "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
     ],
     "privileged": true,
-    "postCreateCommand": "java -version && mvn -version && make --version && docker --version",
+    "postCreateCommand": "java -version && mvn -version && make --version && docker --version && az --version",
     "remoteUser": "vscode"
 }

@@ -3,7 +3,7 @@
 
 package com.microsoft.eventhub.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.Instant;
 import java.util.List;
@@ -119,12 +119,12 @@ public class EmitterSchema {
         private List<String> dimValues;
         
         @JsonProperty("min")
-        @JsonIgnore
-        private Long min; // Ignored when null
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private Long min;
         
         @JsonProperty("max")
-        @JsonIgnore
-        private Long max; // Ignored when null
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private Long max;
         
         @JsonProperty("sum")
         private Long sum;

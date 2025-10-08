@@ -18,6 +18,9 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /
     && apt-get install -y docker-ce docker-ce-cli containerd.io \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Azure CLI
+RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+
 # Install Maven
 RUN curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.4/binaries/apache-maven-3.9.4-bin.tar.gz | tar xzf - -C /opt \
     && ln -s /opt/apache-maven-3.9.4 /opt/maven \

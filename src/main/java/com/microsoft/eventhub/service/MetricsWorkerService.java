@@ -5,6 +5,7 @@ package com.microsoft.eventhub.service;
 
 import com.microsoft.eventhub.config.EmitterConfig;
 import org.apache.http.HttpResponse;
+import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,7 +39,17 @@ public class MetricsWorkerService {
             if (statusCode >= 200 && statusCode < 300) {
                 logger.info("Send Custom Metric end with status: {}", statusCode);
             } else {
-                logger.error("Error sending custom event with status: {}", statusCode);
+                // Log the response body to understand the error
+                String responseBody = "";
+                try {
+                    if (response.getEntity() != null) {
+                        responseBody = org.apache.http.util.EntityUtils.toString(response.getEntity());
+                    }
+                } catch (Exception ex) {
+                    logger.warn("Could not read response body", ex);
+                }
+                
+                logger.error("Error sending custom event with status: {}, response: {}", statusCode, responseBody);
             }
             
         } catch (Exception e) {
