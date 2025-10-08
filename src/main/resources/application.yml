@@ -1,0 +1,24 @@
+logging:
+  level:
+    com.microsoft.eventhub: INFO
+    root: INFO
+  pattern:
+    console: "[%d{HH:mm:ss}] %-5level %logger{36} - %msg%n"
+
+eventhub:
+  region: ${REGION:}
+  subscription-id: ${SUBSCRIPTION_ID:}
+  resource-group: ${RESOURCE_GROUP:}
+  tenant-id: ${TENANT_ID:}
+  event-hub-namespace: ${EVENT_HUB_NAMESPACE:}
+  event-hub-name: ${EVENT_HUB_NAME:}
+  consumer-group: ${CONSUMER_GROUP:}
+  checkpoint-account-name: ${CHECKPOINT_ACCOUNT_NAME:}
+  checkpoint-container-name: ${CHECKPOINT_CONTAINER_NAME:}
+  custom-metric-interval: ${CUSTOM_METRIC_INTERVAL:10000}
+  managed-identity-client-id: ${MANAGED_IDENTITY_CLIENT_ID:}
+
+# Application Insights
+azure:
+  application-insights:
+    connection-string: ${APPLICATIONINSIGHTS_CONNECTION_STRING:}

@@ -1,0 +1,27 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {          
+      "EventHubNamespace": {
+        "value": "eh-lag-metric"
+      },
+      "EventHubName":{
+        "value": "eh-lag-metric-eh"
+      },
+      "CheckpointAccountName":{
+        "value": "ehlagmetricsa"
+      },
+      "CheckpointContainerName":{
+        "value": "eh-lag-metric-container"
+      },
+      "CustomMetricInterval":{
+        "value": "50000"
+      },
+      "managedIdentityName":{
+        "value": "eventhub-metrics-identity-java"
+      },
+      "AcaEnvName":{
+        "value": "my-container-app-env-java"
+      }
+    }
+  }
