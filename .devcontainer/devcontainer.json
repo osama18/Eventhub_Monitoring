@@ -6,10 +6,15 @@
     "customizations": {
         "vscode": {
             "extensions": [
-                "vscjava.vscode-java-pack"
+                "vscjava.vscode-java-pack",
+                "ms-azuretools.vscode-docker"
             ]
         }
     },
-    "postCreateCommand": "java -version && mvn -version && make --version",
+    "mounts": [
+        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+    ],
+    "privileged": true,
+    "postCreateCommand": "java -version && mvn -version && make --version && docker --version",
     "remoteUser": "vscode"
 }
