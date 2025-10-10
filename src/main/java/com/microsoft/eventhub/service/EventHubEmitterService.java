@@ -21,10 +21,13 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,7 +36,7 @@ public class EventHubEmitterService {
     private static final Logger logger = LoggerFactory.getLogger(EventHubEmitterService.class);
     private static final String LAG_METRIC_NAME = "Lag";
     private static final String EVENT_HUB_CUSTOM_METRIC_NAMESPACE = "Event Hub custom metrics";
-    private static final String SEQUENCE_NUMBER = "sequenceNumber";
+    private static final String SEQUENCE_NUMBER = "sequencenumber";
     private static final String OFFSET_KEY = "offset";
     private static final String SERVICE_BUS_HOST_SUFFIX = ".servicebus.windows.net";
     private static final String STORAGE_HOST_SUFFIX = ".blob.core.windows.net";
@@ -93,8 +96,10 @@ public class EventHubEmitterService {
                     .credential(tokenService.defaultAzureCredential)
                     .buildAsyncConsumerClient();
                 
-                // Get partition IDs
-                String[] partitionIds = client.getPartitionIds().collectList().block().toArray(new String[0]);
+                // Get partition IDs with timeout
+                String[] partitionIds = client.getPartitionIds().collectList()
+                    .block(Duration.ofSeconds(10))
+                    .toArray(new String[0]);
                 
                 eventHubConsumerClientsInfo.put(consumerGroup, new ConsumerClientInfo(client, partitionIds));
             }
@@ -108,6 +113,10 @@ public class EventHubEmitterService {
     
     public HttpResponse readFromBlobStorageAndPublishToAzureMonitor() throws IOException {
         List<LagInformation> totalLag = getLag();
+        
+        // Log summary of lag across all partitions
+        long totalLagSum = totalLag.stream().mapToLong(LagInformation::getLag).sum();
+        logger.info("=== Lag Summary: Total lag across all partitions: {} events ===", totalLagSum);
         
         List<String> dimNames = Arrays.asList("EventHubName", "ConsumerGroup", "PartitionId");
         List<EmitterSchema.CustomMetricBaseDataSeriesItem> series = new ArrayList<>();
@@ -145,6 +154,8 @@ public class EventHubEmitterService {
                 CompletableFuture<LagInformation> task = CompletableFuture.supplyAsync(() -> {
                     try {
                         long lag = lagInPartition(consumerGroup, partitionId);
+                        logger.info("Calculated lag for ConsumerGroup='{}' Partition='{}': {} events", 
+                            consumerGroup, partitionId, lag);
                         return new LagInformation(consumerGroup, partitionId, lag);
                     } catch (Exception e) {
                         logger.error("Error calculating lag for consumer group {} partition {}", consumerGroup, partitionId, e);
@@ -155,9 +166,19 @@ public class EventHubEmitterService {
             }
         }
         
-        // Wait for all tasks to complete
+        // Wait for all tasks to complete with timeout
         CompletableFuture<Void> allTasks = CompletableFuture.allOf(tasks.toArray(new CompletableFuture[0]));
-        allTasks.join();
+        try {
+            allTasks.get(30, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            logger.error("Timeout waiting for lag calculation tasks to complete", e);
+            // Cancel incomplete tasks
+            tasks.forEach(task -> task.cancel(true));
+            throw new RuntimeException("Timeout calculating lag for partitions", e);
+        } catch (Exception e) {
+            logger.error("Error waiting for lag calculation tasks", e);
+            throw new RuntimeException("Error calculating lag for partitions", e);
+        }
         
         return tasks.stream()
             .map(CompletableFuture::join)
@@ -170,7 +191,8 @@ public class EventHubEmitterService {
         try {
             ConsumerClientInfo clientInfo = eventHubConsumerClientsInfo.get(consumerGroup);
             PartitionProperties partitionInfo = clientInfo.getConsumerClient()
-                .getPartitionProperties(partitionId).block();
+                .getPartitionProperties(partitionId)
+                .block(Duration.ofSeconds(10));
                 
             if (partitionInfo != null && "-1".equals(partitionInfo.getLastEnqueuedOffset())) {
                 logger.info("LagInPartition Empty partition");

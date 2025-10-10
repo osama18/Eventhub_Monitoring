@@ -28,8 +28,9 @@ public class MetricsWorkerService {
         this.config = config;
     }
     
-    @Scheduled(fixedDelayString = "#{emitterConfig.customMetricInterval}")
+    @Scheduled(fixedDelayString = "${eventhub.customMetricInterval:10000}")
     public void executeMetricsCollection() {
+        logger.info("executeMetricsCollection - START");
         try {
             logger.info("Worker running at: {}", OffsetDateTime.now());
             
@@ -43,7 +44,7 @@ public class MetricsWorkerService {
                 String responseBody = "";
                 try {
                     if (response.getEntity() != null) {
-                        responseBody = org.apache.http.util.EntityUtils.toString(response.getEntity());
+                        responseBody = EntityUtils.toString(response.getEntity());
                     }
                 } catch (Exception ex) {
                     logger.warn("Could not read response body", ex);
@@ -52,8 +53,10 @@ public class MetricsWorkerService {
                 logger.error("Error sending custom event with status: {}, response: {}", statusCode, responseBody);
             }
             
-        } catch (Exception e) {
+        } catch (Throwable e) {
             logger.error("Error in metrics collection worker", e);
+        } finally {
+            logger.info("executeMetricsCollection - END");
         }
     }
 }

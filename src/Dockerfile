@@ -4,8 +4,8 @@ FROM maven:3.8.6-openjdk-11 AS build
 WORKDIR /app
 
 # Copy pom.xml and source code
-COPY ../pom.xml .
-COPY . ./src
+COPY pom.xml .
+COPY src ./src
 
 # Build the application
 RUN mvn clean package -DskipTests

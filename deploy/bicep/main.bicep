@@ -26,6 +26,9 @@ param AcaEnvName string
 @description('Azure Container Registry name')
 param AcrName string
 
+@description('ACR Pull role definition ID - defaults to built-in AcrPull role')
+param acrPullRoleDefinitionId string = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+
 // create a managed identity
 resource mngIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2022-01-31-preview' = {
   name: managedIdentityName  
@@ -39,10 +42,10 @@ resource containerRegistry 'Microsoft.ContainerRegistry/registries@2021-09-01' e
 
 // assign ACR Pull role to the managed identity
 resource acrPullRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid('AcrPull', mngIdentity.id, containerRegistry.id)
+  name: guid(containerRegistry.id, mngIdentity.id, acrPullRoleDefinitionId)
   scope: containerRegistry
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d') // AcrPull role
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleDefinitionId)
     principalId: mngIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
@@ -59,6 +62,7 @@ module roles 'roles.bicep' = {
   name: 'roles'
   params: {    
     ManagedIdentityID: mngIdentity.properties.principalId
+    ManagedIdentityResourceId: mngIdentity.id
     EventHubNamespace: EventHubNamespace
     CheckpointAccountName: CheckpointAccountName
   }

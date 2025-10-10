@@ -20,7 +20,7 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2021-12-01-previ
 }
 
 
-resource containerAppEnvironment 'Microsoft.App/managedEnvironments@2022-06-01-preview'  = {
+resource containerAppEnvironment 'Microsoft.App/managedEnvironments@2023-05-01'  = {
   name: AcaEnvName  
   location: location 
     properties: {
@@ -85,7 +85,7 @@ param CustomMetricInterval string
 
 
 
-resource ContainerApp 'Microsoft.App/containerApps@2022-06-01-preview' = {
+resource ContainerApp 'Microsoft.App/containerApps@2023-05-01' = {
   name: 'eh-lag-emitter-java'
   location: location
   identity: {
@@ -116,48 +116,56 @@ resource ContainerApp 'Microsoft.App/containerApps@2022-06-01-preview' = {
           } 
           env: [
             {
-              name: 'TenantId'
+              name: 'EVENTHUB_TENANT_ID'
               value: subscription().tenantId
             }
             {
-              name: 'SubscriptionId'
+              name: 'EVENTHUB_SUBSCRIPTION_ID'
               value: subscription().subscriptionId
             }            
             {
-              name: 'ResourceGroup'
+              name: 'EVENTHUB_RESOURCE_GROUP'
               value: resourceGroup().name
             }            
             {
-              name: 'Region'
+              name: 'EVENTHUB_REGION'
               value: location
             }            
             {
-              name: 'EventHubNamespace'
+              name: 'EVENTHUB_EVENT_HUB_NAMESPACE'
               value: EventHubNamespace
             }            
             {
-              name: 'EventHubName'
+              name: 'EVENTHUB_EVENT_HUB_NAME'
               value: EventHubName
             }            
             {
-              name: 'ConsumerGroup'
+              name: 'EVENTHUB_CONSUMER_GROUP'
               value: ConsumerGroup
             }            
             {
-              name: 'CheckpointAccountName'
+              name: 'EVENTHUB_CHECKPOINT_ACCOUNT_NAME'
               value: CheckpointAccountName
             }            
             {
-              name: 'CheckpointContainerName'
+              name: 'EVENTHUB_CHECKPOINT_CONTAINER_NAME'
               value: CheckpointContainerName
             }            
             {
-              name: 'CustomMetricInterval'
+              name: 'EVENTHUB_CUSTOM_METRIC_INTERVAL'
               value: CustomMetricInterval
             } 
             {
-              name: 'ManagedIdentityClientId'
+              name: 'EVENTHUB_MANAGED_IDENTITY_CLIENT_ID'
               value: ManagedIdentityClientId
+            }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: ManagedIdentityClientId
+            }
+            {
+              name: 'AZURE_TENANT_ID'
+              value: subscription().tenantId
             }
             {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'

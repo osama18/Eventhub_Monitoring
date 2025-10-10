@@ -3,19 +3,19 @@
     "contentVersion": "1.0.0.0",
     "parameters": {          
       "EventHubNamespace": {
-        "value": "eh-lag-metric"
+        "value": "eh-lag-metric2"
       },
       "EventHubName":{
         "value": "eh-lag-metric-eh"
       },
       "CheckpointAccountName":{
-        "value": "ehlagmetricsa"
+        "value": "ehlagmetricsa2"
       },
       "CheckpointContainerName":{
         "value": "eh-lag-metric-container"
       },
       "CustomMetricInterval":{
-        "value": "50000"
+        "value": "10000"
       },
       "managedIdentityName":{
         "value": "eventhub-metrics-identity-java"
