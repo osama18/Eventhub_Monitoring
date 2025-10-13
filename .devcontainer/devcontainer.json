@@ -1,25 +1,17 @@
 {
-    "name": "Java",
+    "name": "Terraform + Azure",
     "build": {
         "dockerfile": "Dockerfile"
-    },
-    "features": {
-        "ghcr.io/devcontainers/features/azure-cli:1": {}
     },
     "customizations": {
         "vscode": {
             "extensions": [
-                "vscjava.vscode-java-pack",
-                "ms-azuretools.vscode-docker",
+                "hashicorp.terraform",
                 "ms-vscode.azure-account",
-                "bierner.markdown-mermaid"
+                "ms-azuretools.vscode-azureterraform"
             ]
         }
     },
-    "mounts": [
-        "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
-    ],
-    "privileged": true,
-    "postCreateCommand": "java -version && mvn -version && make --version && docker --version && az --version",
+    "postCreateCommand": "terraform --version && az --version",
     "remoteUser": "vscode"
 }

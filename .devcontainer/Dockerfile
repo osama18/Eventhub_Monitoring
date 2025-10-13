@@ -1,37 +1,28 @@
-FROM openjdk:17-jdk-slim
+FROM debian:bullseye-slim
 
-# Install basic tools
+# Install essential tools for Terraform and Azure
 RUN apt-get update && apt-get install -y \
-    git \
+    bash \
     curl \
     wget \
-    make \
+    git \
     ca-certificates \
     gnupg \
     lsb-release \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Docker
-RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
-    && apt-get update \
-    && apt-get install -y docker-ce docker-ce-cli containerd.io \
-    && rm -rf /var/lib/apt/lists/*
-
 # Install Azure CLI
 RUN curl -sL https://aka.ms/InstallAzureCLIDeb | bash
 
-# Install Maven
-RUN curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.4/binaries/apache-maven-3.9.4-bin.tar.gz | tar xzf - -C /opt \
-    && ln -s /opt/apache-maven-3.9.4 /opt/maven \
-    && ln -s /opt/maven/bin/mvn /usr/local/bin/mvn
+# Install Terraform
+RUN wget -O terraform.zip https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip \
+    && apt-get update && apt-get install -y unzip \
+    && unzip terraform.zip -d /usr/local/bin/ \
+    && rm terraform.zip \
+    && rm -rf /var/lib/apt/lists/*
 
-ENV MAVEN_HOME=/opt/maven
-ENV PATH=$PATH:$MAVEN_HOME/bin
+# Create non-root user
+RUN useradd -m -s /bin/bash vscode
 
-# Create a non-root user and add to docker group
-RUN useradd -m -s /bin/bash vscode \
-    && usermod -aG docker vscode
 USER vscode
-
 WORKDIR /workspace
