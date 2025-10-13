@@ -7,109 +7,130 @@ Terraform infrastructure for monitoring Azure Event Hub ConsumerLag using native
 ```
 .
 ├── deploy/
-│   ├── tf/                    # Production Terraform deployment
-│   │   ├── main.tf           # Main infrastructure configuration
-│   │   ├── migrate-state.sh  # Deployment script
-│   │   └── setup-backend.sh  # Remote state setup (optional)
-│   └── temp/                  # Benchmark/reference implementations
-│       └── terraform/         # Example patterns
-└── .devcontainer/             # Dev container for Terraform CLI
+│   ├── tf/
+│   │   ├── local/               # Local state deployment
+│   │   │   ├── main.tf         # Terraform config (no backend)
+│   │   │   ├── deploy.sh       # Deployment script
+│   │   │   └── README.md       # Local deployment guide
+│   │   └── remote/              # Remote state deployment
+│   │       ├── main.tf         # Terraform config (with backend)
+│   │       ├── deploy.sh       # Deployment script
+│   │       ├── setup-backend.sh # Backend setup
+│   │       └── README.md       # Remote deployment guide
+│   └── temp/                    # Benchmark/reference implementations
+│       └── terraform/           # Example patterns from team
+└── .devcontainer/               # Dev container for Terraform + Azure CLI
 ```
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- Azure CLI installed and authenticated
-- Terraform CLI (automatically available in devcontainer)
-- Azure subscription with Event Hub namespace
+### Option 1: Local State (Default)
 
-### Deploy
+Best for single developer, simple projects.
 
-1. **Navigate to deployment folder:**
-   ```bash
-   cd deploy/tf
-   ```
+```bash
+cd deploy/tf/local
+./deploy.sh
+```
 
-2. **Run deployment script:**
-   ```bash
-   ./migrate-state.sh
-   ```
+State stored in `terraform.tfstate` locally.
 
-   The script will:
-   - Prompt for Azure login (if needed)
-   - Ask for Resource Group name
-   - Ask for Event Hub namespace name
-   - Create `terraform.tfvars` with your inputs
-   - Run `terraform init`, `plan`, and `apply`
+### Option 2: Remote State (Team Collaboration)
 
-### What Gets Deployed
+Best for team collaboration, production environments.
 
-✅ **Log Analytics Workspace** - Stores diagnostic logs  
-✅ **Log Analytics Table** - Resource-specific table for Event Hub metrics  
-✅ **Diagnostic Setting** - Sends ConsumerLag metrics to Log Analytics  
+```bash
+cd deploy/tf/remote
+./deploy.sh
+```
 
-### Query ConsumerLag Metrics
+The script will:
+- Prompt for Event Hub configuration
+- Prompt for backend storage configuration
+- **Automatically create backend storage** (if doesn't exist)
+- Deploy with remote state
+
+State stored in Azure Storage.
+
+## 📋 What Gets Deployed
+
+✅ **Log Analytics Workspace** - Stores diagnostic logs (PerGB2018, 30-day retention)  
+✅ **Log Analytics Table** - Resource-specific table `AZMSApplicationMetricLogs`  
+✅ **Diagnostic Setting** - Sends ConsumerLag metrics to Log Analytics (Dedicated mode)  
+
+## 🔍 Query ConsumerLag Metrics
 
 Go to Azure Portal → Log Analytics Workspace → Logs, then run:
 
 ```kusto
+// View all ConsumerLag metrics
 AZMSApplicationMetricLogs
 | where Name == "ConsumerLag"
 | project TimeGenerated, ConsumerGroup, PartitionId, Total
 | order by TimeGenerated desc
+
+// Aggregate by consumer group
+AZMSApplicationMetricLogs
+| where Name == "ConsumerLag"
+| summarize AvgLag = avg(Total), MaxLag = max(Total) by ConsumerGroup
+| order by AvgLag desc
 ```
 
 ## 🛠️ Manual Terraform Commands
 
-If you prefer manual control:
+### Local State
 
 ```bash
-cd deploy/tf
+cd deploy/tf/local
 
-# Initialize
 terraform init
 
-# Create terraform.tfvars manually
-cat > terraform.tfvars <<EOF
+cat > terraform.tfvars <<TFVARS
 subscription_id         = "your-subscription-id"
 resource_group_name     = "your-resource-group"
 eventhub_namespace_name = "your-eventhub-namespace"
-EOF
+TFVARS
 
-# Plan and apply
+terraform plan
+terraform apply
+```
+
+### Remote State
+
+```bash
+cd deploy/tf/remote
+
+# Setup backend first
+./setup-backend.sh
+
+# Edit main.tf backend block
+
+terraform init
+
+cat > terraform.tfvars <<TFVARS
+subscription_id         = "your-subscription-id"
+resource_group_name     = "your-resource-group"
+eventhub_namespace_name = "your-eventhub-namespace"
+TFVARS
+
 terraform plan
 terraform apply
 ```
 
 ## 🧹 Cleanup
 
-To destroy all resources:
-
 ```bash
-cd deploy/tf
+cd deploy/tf/local  # or deploy/tf/remote
 terraform destroy
 ```
 
 ## 📚 Reference
 
-- **deploy/temp/terraform/** - Contains benchmark Terraform patterns used as reference
+- **deploy/temp/terraform/** - Contains benchmark Terraform patterns from team (aks, fabric examples)
 - **Azure Diagnostic Logs** - Uses resource-specific mode (`log_analytics_destination_type = "Dedicated"`)
-- **Table**: `AZMSApplicationMetricLogs` (dedicated Event Hub metrics table)
-
-## 🔧 Remote State (Optional)
-
-To use remote state storage:
-
-1. Run setup script:
-   ```bash
-   cd deploy/tf
-   ./setup-backend.sh
-   ```
-
-2. Uncomment backend block in `main.tf`
-
-3. Run `terraform init` to migrate state
+- **Table**: `AZMSApplicationMetricLogs` (dedicated Event Hub metrics table, not AzureDiagnostics)
+- **Pattern**: Single `main.tf` file with variables, provider, resources, outputs (matches team standard)
 
 ---
 
-**Note**: This is a simplified Terraform-only deployment. For the full Java-based custom metrics emitter, see the original repository branches.
+**Note**: This is a simplified Terraform-only deployment. Project focuses solely on infrastructure deployment for Event Hub monitoring.

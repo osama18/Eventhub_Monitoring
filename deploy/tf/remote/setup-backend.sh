@@ -5,17 +5,43 @@
 
 set -e
 
-# Variables
-SUBSCRIPTION_ID="ef5bdf4d-e9c1-4ea3-a8c3-fa5b35bcf7c3"
-RESOURCE_GROUP_NAME="eh-lag-rg"
-STORAGE_ACCOUNT_NAME="stehlagterraformstate"
-CONTAINER_NAME="tfstate"
-LOCATION="uksouth"
+echo "Azure Storage Backend Setup for Terraform"
+echo "=========================================="
+echo ""
 
-echo "Setting up Azure Storage Account for Terraform remote state..."
+# Check if already logged in to Azure
+echo "Checking Azure login status..."
+if ! az account show &> /dev/null; then
+    echo "Not logged in. Logging in to Azure..."
+    az login
+else
+    echo "Already logged in to Azure."
+fi
 
-# Login to Azure (if not already logged in)
-az login --output table
+# Get subscription ID from logged in account
+SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+SUBSCRIPTION_NAME=$(az account show --query name -o tsv)
+
+echo "Using subscription:"
+echo "  Name: $SUBSCRIPTION_NAME"
+echo "  ID: $SUBSCRIPTION_ID"
+echo ""
+
+# Prompt for backend storage variables
+read -p "Enter Resource Group Name for backend storage: " RESOURCE_GROUP_NAME
+read -p "Enter Storage Account Name (lowercase, no special chars): " STORAGE_ACCOUNT_NAME
+read -p "Enter Container Name (default: tfstate): " CONTAINER_NAME
+CONTAINER_NAME=${CONTAINER_NAME:-tfstate}
+read -p "Enter Location (default: uksouth): " LOCATION
+LOCATION=${LOCATION:-uksouth}
+
+echo ""
+echo "Configuration:"
+echo "  Resource Group: $RESOURCE_GROUP_NAME"
+echo "  Storage Account: $STORAGE_ACCOUNT_NAME"
+echo "  Container: $CONTAINER_NAME"
+echo "  Location: $LOCATION"
+echo ""
 
 # Set the subscription
 az account set --subscription $SUBSCRIPTION_ID
@@ -50,6 +76,7 @@ else
         --account-key $ACCOUNT_KEY
 fi
 
+echo ""
 echo "Azure Storage setup complete!"
 echo ""
 echo "Backend configuration details:"
@@ -57,4 +84,3 @@ echo "  Resource Group: $RESOURCE_GROUP_NAME"
 echo "  Storage Account: $STORAGE_ACCOUNT_NAME"
 echo "  Container: $CONTAINER_NAME"
 echo ""
-echo "You can now update your Terraform configurations to use this remote backend."
