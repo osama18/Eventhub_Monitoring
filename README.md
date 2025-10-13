@@ -2,7 +2,7 @@
 
 Terraform infrastructure for monitoring Azure Event Hub ConsumerLag using native diagnostic logs.
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 .
@@ -14,15 +14,14 @@ Terraform infrastructure for monitoring Azure Event Hub ConsumerLag using native
 │   │   │   └── README.md       # Local deployment guide
 │   │   └── remote/              # Remote state deployment
 │   │       ├── main.tf         # Terraform config (with backend)
-│   │       ├── deploy.sh       # Deployment script
-│   │       ├── setup-backend.sh # Backend setup
+│   │       ├── deploy.sh       # Deployment script (auto-creates backend)
 │   │       └── README.md       # Remote deployment guide
 │   └── temp/                    # Benchmark/reference implementations
 │       └── terraform/           # Example patterns from team
 └── .devcontainer/               # Dev container for Terraform + Azure CLI
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Option 1: Local State (Default)
 
@@ -52,31 +51,25 @@ The script will:
 
 State stored in Azure Storage.
 
-## 📋 What Gets Deployed
+## What Gets Deployed
 
-✅ **Log Analytics Workspace** - Stores diagnostic logs (PerGB2018, 30-day retention)  
-✅ **Log Analytics Table** - Resource-specific table `AZMSApplicationMetricLogs`  
-✅ **Diagnostic Setting** - Sends ConsumerLag metrics to Log Analytics (Dedicated mode)  
+- **Log Analytics Workspace** - Stores diagnostic logs (PerGB2018, 30-day retention)  
+- **Log Analytics Table** - Resource-specific table `AZMSApplicationMetricLogs`  
+- **Diagnostic Setting** - Sends ConsumerLag metrics to Log Analytics (Dedicated mode)  
 
-## 🔍 Query ConsumerLag Metrics
+## Query ConsumerLag Metrics
 
 Go to Azure Portal → Log Analytics Workspace → Logs, then run:
 
 ```kusto
 // View all ConsumerLag metrics
 AZMSApplicationMetricLogs
-| where Name == "ConsumerLag"
-| project TimeGenerated, ConsumerGroup, PartitionId, Total
-| order by TimeGenerated desc
-
-// Aggregate by consumer group
-AZMSApplicationMetricLogs
-| where Name == "ConsumerLag"
-| summarize AvgLag = avg(Total), MaxLag = max(Total) by ConsumerGroup
-| order by AvgLag desc
+| where OperationName == "ConsumerLag"
 ```
 
-## 🛠️ Manual Terraform Commands
+**Note:** Data appears 5-15 minutes after consumers start reading messages. First-time ingestion can take up to 30 minutes.
+
+## Manual Terraform Commands
 
 ### Local State
 
@@ -100,12 +93,15 @@ terraform apply
 ```bash
 cd deploy/tf/remote
 
-# Setup backend first
-./setup-backend.sh
+# The deploy.sh script automatically handles backend setup
+# Or run manually:
 
-# Edit main.tf backend block
-
-terraform init
+terraform init \
+  -backend-config="resource_group_name=<BACKEND_RG>" \
+  -backend-config="storage_account_name=<STORAGE_ACCOUNT>" \
+  -backend-config="container_name=<CONTAINER>" \
+  -backend-config="key=eventhub-monitoring/terraform.tfstate" \
+  -backend-config="use_azuread_auth=true"
 
 cat > terraform.tfvars <<TFVARS
 subscription_id         = "your-subscription-id"
@@ -117,20 +113,15 @@ terraform plan
 terraform apply
 ```
 
-## 🧹 Cleanup
+**Note:** Requires **Storage Blob Data Contributor** role on the storage account for Azure AD authentication.
+
+## Cleanup
 
 ```bash
 cd deploy/tf/local  # or deploy/tf/remote
 terraform destroy
 ```
 
-## 📚 Reference
-
-- **deploy/temp/terraform/** - Contains benchmark Terraform patterns from team (aks, fabric examples)
-- **Azure Diagnostic Logs** - Uses resource-specific mode (`log_analytics_destination_type = "Dedicated"`)
-- **Table**: `AZMSApplicationMetricLogs` (dedicated Event Hub metrics table, not AzureDiagnostics)
-- **Pattern**: Single `main.tf` file with variables, provider, resources, outputs (matches team standard)
-
 ---
 
-**Note**: This is a simplified Terraform-only deployment. Project focuses solely on infrastructure deployment for Event Hub monitoring.
+**Note**: This is a simplified Terraform-only deployment. Project focuses solely on infrastructure deployment for Event Hub monitoring of consumer lag.
