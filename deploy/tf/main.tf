@@ -67,17 +67,6 @@ resource "azurerm_log_analytics_workspace" "this" {
 }
 
 # ==============================================================================
-# Log Analytics Table
-# ==============================================================================
-
-resource "azurerm_log_analytics_workspace_table" "consumerlag_metrics" {
-  name                = "AZMSApplicationMetricLogs"
-  workspace_id        = azurerm_log_analytics_workspace.this.id
-  plan                = "Analytics"
-  retention_in_days   = 30
-}
-
-# ==============================================================================
 # Diagnostic Setting
 # ==============================================================================
 
@@ -85,10 +74,27 @@ resource "azurerm_monitor_diagnostic_setting" "eventhub_consumerlag" {
   name                           = "diag-consumerlag-${data.azurerm_eventhub_namespace.this.name}"
   target_resource_id             = data.azurerm_eventhub_namespace.this.id
   log_analytics_workspace_id     = azurerm_log_analytics_workspace.this.id
-  log_analytics_destination_type = "Dedicated"
+  # Using AzureDiagnostics table (not Dedicated) to get ConsumerGroup and PartitionId fields
 
+  
   enabled_log {
     category = "ApplicationMetricsLogs"
+  }
+
+  enabled_log {
+    category = "OperationalLogs"
+  }
+
+  enabled_log {
+    category = "RuntimeAuditLogs"
+  }
+
+  enabled_log {
+    category = "DiagnosticErrorLogs"
+  }
+
+  enabled_log {
+    category = "EventHubVNetConnectionEvent"
   }
 }
 
@@ -124,16 +130,6 @@ output "log_analytics_workspace_id" {
 output "log_analytics_workspace_customer_id" {
   value       = azurerm_log_analytics_workspace.this.workspace_id
   description = "The workspace (customer) ID of the Log Analytics workspace"
-}
-
-output "consumerlag_table_name" {
-  value       = azurerm_log_analytics_workspace_table.consumerlag_metrics.name
-  description = "The name of the ConsumerLag metrics table"
-}
-
-output "consumerlag_table_id" {
-  value       = azurerm_log_analytics_workspace_table.consumerlag_metrics.id
-  description = "The ID of the ConsumerLag metrics table"
 }
 
 output "diagnostic_setting_name" {

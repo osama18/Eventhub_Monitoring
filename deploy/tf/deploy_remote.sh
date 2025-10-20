@@ -2,6 +2,7 @@
 
 # Script to deploy with Azure remote backend
 # Automatically sets up backend storage if needed
+# Note: Requires Azure AD authentication (Storage Blob Data Contributor role)
 
 set -e
 
@@ -77,18 +78,40 @@ else
         --access-tier Hot
 fi
 
-# Get storage account key
-ACCOUNT_KEY=$(az storage account keys list --resource-group $BACKEND_RESOURCE_GROUP_NAME --account-name $BACKEND_STORAGE_ACCOUNT_NAME --query '[0].value' -o tsv)
+# Assign Storage Blob Data Contributor role to current user
+echo "Ensuring proper permissions on storage account..."
+CURRENT_USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
+STORAGE_ACCOUNT_ID=$(az storage account show --name $BACKEND_STORAGE_ACCOUNT_NAME --resource-group $BACKEND_RESOURCE_GROUP_NAME --query id -o tsv)
 
-# Create or use existing container
-if az storage container show --name $BACKEND_CONTAINER_NAME --account-name $BACKEND_STORAGE_ACCOUNT_NAME --account-key $ACCOUNT_KEY &> /dev/null; then
+# Check if role assignment already exists
+EXISTING_ROLE=$(az role assignment list \
+    --assignee $CURRENT_USER_OBJECT_ID \
+    --scope $STORAGE_ACCOUNT_ID \
+    --role "Storage Blob Data Contributor" \
+    --query '[0].id' -o tsv)
+
+if [ -z "$EXISTING_ROLE" ]; then
+    echo "Assigning 'Storage Blob Data Contributor' role to current user..."
+    az role assignment create \
+        --role "Storage Blob Data Contributor" \
+        --assignee $CURRENT_USER_OBJECT_ID \
+        --scope $STORAGE_ACCOUNT_ID
+    
+    echo "⏳ Waiting 30 seconds for role assignment to propagate..."
+    sleep 30
+else
+    echo "Role assignment already exists."
+fi
+
+# Create or use existing container (using Azure AD authentication)
+if az storage container show --name $BACKEND_CONTAINER_NAME --account-name $BACKEND_STORAGE_ACCOUNT_NAME --auth-mode login &> /dev/null; then
     echo "Container $BACKEND_CONTAINER_NAME already exists."
 else
     echo "Creating container $BACKEND_CONTAINER_NAME..."
     az storage container create \
         --name $BACKEND_CONTAINER_NAME \
         --account-name $BACKEND_STORAGE_ACCOUNT_NAME \
-        --account-key $ACCOUNT_KEY
+        --auth-mode login
 fi
 
 echo "✅ Backend storage ready!"
@@ -104,13 +127,14 @@ TFVARS
 echo "Created terraform.tfvars"
 echo ""
 
-# Initialize with remote backend using -backend-config
+# Initialize with remote backend using -backend-config (using Azure AD authentication)
 echo "Initializing Terraform with remote backend..."
 terraform init \
   -backend-config="resource_group_name=$BACKEND_RESOURCE_GROUP_NAME" \
   -backend-config="storage_account_name=$BACKEND_STORAGE_ACCOUNT_NAME" \
   -backend-config="container_name=$BACKEND_CONTAINER_NAME" \
-  -backend-config="key=eventhub-monitoring/terraform.tfstate"
+  -backend-config="key=eventhub-monitoring/terraform.tfstate" \
+  -backend-config="use_azuread_auth=true"
 
 # Plan the changes
 echo ""
@@ -130,4 +154,3 @@ echo "  Resource Group: $BACKEND_RESOURCE_GROUP_NAME"
 echo "  Storage Account: $BACKEND_STORAGE_ACCOUNT_NAME"
 echo "  Container: $BACKEND_CONTAINER_NAME"
 echo "  Key: eventhub-monitoring/terraform.tfstate"
-
