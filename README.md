@@ -1,4 +1,4 @@
-# Event Hub Custom Metrics Emitter
+# Event Hub Monitoring
 
 This project provides a comprehensive solution for monitoring Azure Event Hubs and overall system health. It includes Terraform configurations for infrastructure deployment and detailed design documentation for a robust observability strategy.
 
@@ -25,3 +25,8 @@ This project provides a comprehensive solution for monitoring Azure Event Hubs a
 - **[KQL Queries (`docs/kql-queries.md`)](docs/kql-queries.md)**: Contains a set of useful Kusto Query Language (KQL) queries to analyze consumer lag and other metrics in Log Analytics.
 
 - **[Deployment Guide (`deploy/tf/README.md`)](deploy/tf/README.md)**: Provides detailed instructions on how to deploy the infrastructure using the provided Terraform scripts.
+
+
+## Disclaimer
+
+This project is not an official product. Always do your own research and testing before deploying to a production environment.

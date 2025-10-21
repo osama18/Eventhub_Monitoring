@@ -52,7 +52,7 @@ data "azurerm_eventhub_namespace" "this" {
 # ==============================================================================
 
 resource "azurerm_log_analytics_workspace" "this" {
-  name                = "log-eh-consumerlag-${data.azurerm_resource_group.this.location}"
+  name                = "log-eh-${data.azurerm_resource_group.this.location}"
   location            = data.azurerm_resource_group.this.location
   resource_group_name = data.azurerm_resource_group.this.name
   sku                 = "PerGB2018"
@@ -62,7 +62,7 @@ resource "azurerm_log_analytics_workspace" "this" {
     environment = "development"
     managed-by  = "terraform"
     project     = "eventhub-monitoring"
-    purpose     = "eventhub-consumerlag-monitoring"
+    purpose     = "eventhub-monitoring"
   }
 }
 
@@ -70,8 +70,8 @@ resource "azurerm_log_analytics_workspace" "this" {
 # Diagnostic Setting
 # ==============================================================================
 
-resource "azurerm_monitor_diagnostic_setting" "eventhub_consumerlag" {
-  name                           = "diag-consumerlag-${data.azurerm_eventhub_namespace.this.name}"
+resource "azurerm_monitor_diagnostic_setting" "eventhub_monitoring" {
+  name                           = "diag-eh-${data.azurerm_eventhub_namespace.this.name}"
   target_resource_id             = data.azurerm_eventhub_namespace.this.id
   log_analytics_workspace_id     = azurerm_log_analytics_workspace.this.id
   # Using AzureDiagnostics table (not Dedicated) to get ConsumerGroup and PartitionId fields
@@ -133,11 +133,11 @@ output "log_analytics_workspace_customer_id" {
 }
 
 output "diagnostic_setting_name" {
-  value       = azurerm_monitor_diagnostic_setting.eventhub_consumerlag.name
+  value       = azurerm_monitor_diagnostic_setting.eventhub_monitoring.name
   description = "The name of the diagnostic setting"
 }
 
 output "diagnostic_setting_id" {
-  value       = azurerm_monitor_diagnostic_setting.eventhub_consumerlag.id
+  value       = azurerm_monitor_diagnostic_setting.eventhub_monitoring.id
   description = "The ID of the diagnostic setting"
 }
