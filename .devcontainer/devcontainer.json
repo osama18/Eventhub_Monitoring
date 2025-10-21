@@ -1,5 +1,5 @@
 {
-    "name": "Terraform + Azure",
+    "name": "Eventhub_Monitoring",
     "build": {
         "dockerfile": "Dockerfile"
     },

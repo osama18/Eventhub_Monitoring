@@ -1,4 +1,4 @@
-# Event Hub Monitoring
+# Eventhub_Monitoring
 
 This project provides a comprehensive solution for monitoring Azure Event Hubs and overall system health. It includes Terraform configurations for infrastructure deployment and detailed design documentation for a robust observability strategy.
 
