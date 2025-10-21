@@ -87,9 +87,8 @@ SLOs are the internal targets set for our SLIs over a specific time window. They
   > _This target aligns with the official Event Hubs Premium SLA and is the basis for [burn-rate alerting](#note-burn-rate)._
 
 - <span id="slo-backlog-freshness"></span>**Backlog Freshness**: Over a trailing 30-day period, at least **99%** of rolling 5-minute windows must satisfy:
-  - `p99(consumerLagInMessages) ≤ Lₘ`
   - `p99(consumerLagInSeconds) ≤ [consumer_lag_seconds_threshold](#var-consumer-lag)`
-  > _Compliance is measured by the [Backlog Freshness SLI](#sli-backlog-freshness). The `consumer_lag_seconds_threshold` is the primary business requirement for data staleness. The message count threshold, `Lₘ`, is then derived from it using the calculations in [Backlog Thresholds and Clearance](#backlog-thresholds) to ensure the thresholds are consistent and achievable._
+  > _This SLO defines the business requirement for data freshness. Compliance is measured indirectly by the [Backlog Freshness SLI](#sli-backlog-freshness), which uses a derived message count threshold (`Lₘ`) calculated from this time-based goal. See [Backlog Thresholds and Clearance](#backlog-thresholds) for the formula._
 
 - <span id="slo-publish-success"></span>**Publish Success**: Over a trailing 30-day period, at least **99.9%** of rolling 5-minute windows record publishes succeeding within `Wᵣ` seconds (retries included), where `Wᵣ` is the publish success retry window.
   > _A failure to meet this SLO often points to the [sustained throttling risk](#risk-sustained-throttling)._
@@ -113,8 +112,8 @@ SLIs are user-centric indicators derived from the core metrics to measure servic
   - **Note**: 4xx user errors and throttled requests are excluded, as they are handled by the Publish Success SLI.
 
 - <span id="sli-backlog-freshness"></span>**Backlog Freshness (Consumer Lag)**: Measures whether consumers are keeping up with the data stream. This is critical for ensuring downstream systems receive data in a timely manner.
-  - **Formula**: `p99(consumerLagInMessages)` and `p99(consumerLagInSeconds)` over a rolling 5-minute window.
-  - **Source Metrics**: [`consumerLagInMessages`, `consumerLagInSeconds`](#metric-consumer-lag) (from `AZMSApplicationMetricLogs`).
+  - **Formula**: `p99(ConsumerLag) ≤ Lₘ` over a rolling 5-minute window, where `Lₘ` is the message count threshold derived from the time-based SLO.
+  - **Source Metrics**: [`ConsumerLag`](#metric-consumer-lag) (from `AZMSApplicationMetricLogs`). `consumerLagInSeconds` is the conceptual goal this SLI tracks.
   - **Dependency**: This SLI is only valid if the corresponding [Consumer Heartbeat](#metric-consumer-heartbeat) is being emitted. A missing heartbeat indicates a consumer failure and a potential data freshness issue that this SLI cannot detect.
 
 - <span id="sli-publish-success"></span>**Publish Success**: Measures the percentage of publish attempts that are successfully acknowledged within a defined retry window. This reflects the end-to-end success rate for producers, including retries.
@@ -149,7 +148,7 @@ These alerts fire when an SLO is actively being violated or is predicted to be v
 | Alert | Governing SLO | Threshold & Window | Severity | Action / Playbook |
 | --- | --- | --- | --- | --- |
 | <span id="alert-availability-burn"></span>Availability Burn Rate | [Ingestion Availability](#slo-availability) | **Fast Burn:** [Burn rate](#note-burn-rate) ≥ 57.6 over 15 min <br> **Slow Burn:** [Burn rate](#note-burn-rate) ≥ 6 over 6 hours | High (Page) | **Fast Burn indicates a critical outage.** The service is failing at a rate that will consume 2% of the monthly error budget in just 15 minutes. <br> **Slow Burn indicates sustained degradation.** The service has been failing at a low but persistent rate for 6 hours, consuming 5% of the monthly error budget. |
-| <span id="alert-backlog-breach"></span>Backlog Freshness SLO Breach | [Backlog Freshness](#slo-backlog-freshness) | p99 lag > thresholds | 10 min | High (Page) | Increase consumer concurrency, optimize downstream dependencies. |
+| <span id="alert-backlog-breach"></span>Backlog Freshness SLO Breach | [Backlog Freshness](#slo-backlog-freshness) | `p99(ConsumerLag)` > [`Lₘ`](#backlog-thresholds) | 10 min | High (Page) | The message backlog has exceeded the calculated threshold `Lₘ`, which indicates a likely violation of the time-based freshness SLO. See [Backlog Thresholds](#backlog-thresholds) for calculation details. Increase consumer concurrency or optimize downstream dependencies. |
 | <span id="alert-latency-breach"></span>Publish Latency SLO Breach | [Publish Latency (Tail)](#slo-publish-latency) | p99 > [publish_latency_p99_ms](#var-publish-latency) | 10 min | High (Page) | Investigate network path, throttling, and retry configuration. |
 | <span id="alert-consumer-processing-breach"></span>Consumer Processing SLO Breach | [Consumer Processing Efficiency](#slo-consumer-efficiency) | p99 > [consumer_processing_p95_ms](#var-consumer-processing) | 15 min | Medium (Ticket) | **Early warning for growing lag.** Investigate consumer application performance. Check for slow downstream dependencies, inefficient code, or resource contention (CPU/memory). |
 
@@ -164,13 +163,13 @@ These alerts fire on metrics that indicate a potential future risk to an SLO, al
 | <span id="alert-connection-headroom"></span>Connection Headroom | [`ActiveConnections`](#metric-active-connections) | ≥ [connection_headroom_percent](#var-connection-headroom)% of limit | 15 min | High (Page) | Audit connection leaks, scale PUs, or rebalance clients. |
 | <span id="alert-producer-throttling"></span><span id="risk-sustained-throttling"></span>Producer Throttling | [`ThrottledRequests`](#metric-throttled) | > 1/s | 5 min | Medium (Ticket) | Scale PUs/partitions; adjust producer backoff; pre-warm namespaces. |
 | <span id="alert-predictive-lag"></span>Predictive Lag | [`Hₚ`](#formula-headroom) | < ([`cₚ`](#consumer-capacity) × 0.5) | 15 min | Low (Dashboard) | **Early warning for growing lag.** Consumer headroom is below 50% of capacity ([`cₚ`](#consumer-capacity)). Proactively scale up consumers or PUs before the headroom becomes negative and lag begins to grow. |
-| <span id="alert-lag-diagnostics"></span>Consumer Lag Diagnostics | [`consumerLagInMessages`, `consumerLagInSeconds`](#metric-consumer-lag) | p99 > small thresholds | 10 min | Low (Dashboard) | Visual indicator for dashboard; no action required unless other alerts fire. |
+| <span id="alert-lag-diagnostics"></span>Consumer Lag Diagnostics | [`ConsumerLag`](#metric-consumer-lag) | p99 > small thresholds | 10 min | Low (Dashboard) | Visual indicator for dashboard; no action required unless other alerts fire. |
 
 **Dashboards**
 
 - **SLO Overview**: Availability burn rate, publish latency, and backlog freshness (p99).
 - **Throughput Analysis**: `IncomingMessages`/`OutgoingMessages`, `IncomingBytes`/`OutgoingBytes`, and average event size. This dashboard is used to visualize the backlog trend by comparing ingress and egress rates.
-  > _Note: This provides a coarse, namespace-level trend and can be misleading. `OutgoingMessages` aggregates reads from all consumer groups and can be inflated by consumer-side retries. For accurate backlog tracking for a specific application, rely on the `consumerLagInMessages` metric for its consumer group._
+  > _Note: This provides a coarse, namespace-level trend and can be misleading. `OutgoingMessages` aggregates reads from all consumer groups and can be inflated by consumer-side retries. For accurate backlog tracking for a specific application, rely on the `ConsumerLag` metric for its consumer group._
 - **Lag Analytics**: p50/p90/p99 lag, consumer heartbeat gaps and consumer efficiency.
 - **Risk Indicators**: Partition headroom ([`Hₚ`](#metric-headroom)), and connection saturation.
 - **Operational Triage**: Error breakdown by type, `ThrottledRequests`, and `consumer_processing_time_ms`.
@@ -208,7 +207,7 @@ These metrics must be instrumented and emitted directly from the client applicat
 
 These metrics are provided by Azure when the corresponding diagnostic log categories are enabled.
 
-- <span id="metric-consumer-lag"></span>**Consumer Lag**: `consumerLagInMessages` and `consumerLagInSeconds` measure the backlog depth and data staleness per partition. This metric is sourced from the `ApplicationMetricsLogs` category within Diagnostic Settings and is critical for the [Backlog Freshness SLI](#sli-backlog-freshness).
+- <span id="metric-consumer-lag"></span>**Consumer Lag**: The primary metric for measuring backlog is `ConsumerLag` (representing the number of messages), which is sourced from the `ApplicationMetricsLogs` category. This is the measurable metric used for the [Backlog Freshness SLI](#sli-backlog-freshness). The conceptual, business-facing metric is `consumerLagInSeconds` (representing data staleness), from which the alertable threshold for `ConsumerLag` is derived.
 
 **Derived & Predictive Metrics**
 
