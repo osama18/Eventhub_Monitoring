@@ -66,7 +66,7 @@ This is a special case as it is a primary cause for *both* Data Staleness and Da
 - **Primary Causes:**
     - **Consumer(s) Down:** The consumer application has crashed, is unresponsive, or cannot acquire a partition lease.
     - **Consumer(s) Slow:** The application is running but cannot process messages fast enough due to inefficient code, resource constraints (CPU/Memory), or slow downstream dependencies.
-    - **Sustained Processing Errors:** An unprocessable message (e.g., due to a deserialization failure) or an external dependency failure is causing events to be constantly retried and sent to a dead-letter queue instead of being processed.
+    - **Sustained Processing Errors:** An unprocessable message (e.g., due to a deserialization failure) or an external dependency failure is causing events to be constantly retried and sent to a custom-managed dead-letter queue instead of being processed (as Event Hubs does not have a built-in DLQ).
 
 - **Detection & Alerting:**
 
