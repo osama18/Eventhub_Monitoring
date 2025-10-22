@@ -30,7 +30,7 @@ This section is structured around the primary business risks. Each risk section 
 
 - **Primary Causes:**
     - **Ingestion Unavailability:** The Event Hubs service is unable to accept new events from producers.
-    - **[Unchecked Consumer Lag Growth](#risk-deep-dive-lag):** The backlog grows so large so The service might became saturated, causing producers to be throttled for an extended period.
+    - **[Unchecked Consumer Lag Growth](#risk-deep-dive-lag):** The backlog grows so large that the service becomes saturated, causing producers to be throttled for an extended period.
 
 - **Detection & Alerting (for Ingestion Unavailability):**
 
@@ -100,7 +100,7 @@ SLOs are the internal targets set for our SLIs over a specific time window. They
   > _A failure to meet this SLO often points to the [sustained throttling risk](#risk-sustained-throttling)._
 
 - <span id="slo-publish-latency"></span>**Publish Latency (Tail)**: Over a trailing 30-day period, at least **99.9%** of rolling 5-minute windows must maintain a p99 enqueue-to-ACK latency of **≤ [publish_latency_p99_ms](#var-publish-latency) ms**.
-  > _**Governing SLI**: [Publish Latency (Tail) SLI](#sli-publish-latency)_
+  - **Governing SLI**: [Publish Latency (Tail) SLI](#sli-publish-latency)
   > _This SLO ensures that even the slowest 1% of publish operations complete within acceptable timeframes, preventing user-facing delays._
 
 - <span id="slo-consumer-efficiency"></span>**Consumer Processing Efficiency**: Over a trailing 30-day period, at least **99%** of rolling 5-minute windows must hold p95 consumer processing latency at **≤ [consumer_processing_p95_ms](#var-consumer-processing) ms**.
@@ -115,31 +115,30 @@ SLOs are the internal targets set for our SLIs over a specific time window. They
 
 SLIs are user-centric indicators derived from the core metrics to measure service performance from the user's perspective.
 
-- <span id="sli-availability"></span>**Ingestion Availability**: Measures the percentage of requests to the Event Hubs service that succeed. This SLI directly reflects the service's reliability for producers.
-  - **Formula**: `availability = SuccessfulRequests ÷ (SuccessfulRequests + ServerErrors)`
-  - **Source Metrics**: [`SuccessfulRequests`](#metric-successful-requests), [`ServerErrors`](#metric-server-errors) (from Azure Monitor).
-  - **Note**: 4xx user errors and throttled requests are excluded, as they are handled by the Publish Success SLI.
+- <span id="sli-availability"></span>**Ingestion Availability**: Ratio of successful requests to total requests processed by the Event Hubs service. This SLI directly reflects the service's reliability for producers.
+  - **Formula**: `SuccessfulRequests ÷ (SuccessfulRequests + ServerErrors)`
+  - **Source Metrics**: [`SuccessfulRequests`](#metric-successful-requests), [`ServerErrors`](#metric-server-errors) (from Azure Monitor)
+  > _**Note**: 4xx user errors and throttled requests are excluded, as they are handled by the Publish Success SLI._
 
-- <span id="sli-backlog-freshness"></span>**Backlog Freshness (Consumer Lag)**: Measures whether consumers are keeping up with the data stream. This is critical for ensuring downstream systems receive data in a timely manner.
-  - **Formula**: `p99(ConsumerLag) ≤ Lₘ` over a rolling 5-minute window, where `Lₘ` is the message count threshold derived from the time-based SLO.
-  - **Source Metrics**: [`ConsumerLag`](#metric-consumer-lag) (from `AZMSApplicationMetricLogs`). `consumerLagInSeconds` is the conceptual goal this SLI tracks.
-  - **Dependency**: This SLI is only valid if the corresponding [Consumer Heartbeat](#metric-consumer-heartbeat) is being emitted. A missing heartbeat indicates a consumer failure and a potential data freshness issue that this SLI cannot detect.
+- <span id="sli-backlog-freshness"></span>**Backlog Freshness (Consumer Lag)**: Ratio of 5-minute windows where consumer lag remains within acceptable thresholds to total windows measured.
+  - **Formula**: `Windows where p99(ConsumerLag) ≤ Lₘ ÷ Total Windows`, where `Lₘ` is the message count threshold derived from the time-based SLO.
+  - **Source Metrics**: [`ConsumerLag`](#metric-consumer-lag) (from `AZMSApplicationMetricLogs`)
+  > _**Note** `consumerLagInSeconds` is the conceptual goal this SLI tracks. This SLI is only valid if the corresponding [Consumer Heartbeat](#metric-consumer-heartbeat) is being emitted. A missing heartbeat indicates a consumer failure and a potential data freshness issue that this SLI cannot detect._
 
-- <span id="sli-publish-success"></span>**Publish Success**: Measures the percentage of publish attempts that are successfully acknowledged within a defined retry window. This reflects the end-to-end success rate for producers, including retries.
-  - **Formula**: Percentage of attempts acknowledged within the configured retry window.
-   - **Source Metrics**: [`SuccessfulRequests`](#metric-successful-requests), [`ThrottledRequests`](#metric-throttled), [`ServerErrors`](#metric-server-errors), and producer-side retry logs.
+- <span id="sli-publish-success"></span>**Publish Success**: Ratio of publish attempts successfully acknowledged within the retry window to total publish attempts.
+  - **Formula**: `SuccessfulRequests ÷ (SuccessfulRequests + ThrottledRequests + ServerErrors)`
+  - **Source Metrics**: [`SuccessfulRequests`](#metric-successful-requests), [`ThrottledRequests`](#metric-throttled), [`ServerErrors`](#metric-server-errors), and producer-side retry logs
 
-- <span id="sli-publish-latency"></span>**Publish Latency (Tail)**: Measures the 99th percentile latency for publishing a message, ensuring that even the slowest requests are acceptably fast.
-  - **Formula**: p99 of `publish_latency_ms`.
-  - **Source Metric**: [`publish_latency_ms`](#metric-publish-latency) (custom metric).
+- <span id="sli-publish-latency"></span>**Publish Latency (Tail)**: Ratio of 5-minute windows where p99 publish latency remains within acceptable thresholds to total windows measured.
+  - **Formula**: `Windows where p99(publish_latency_ms) ≤ threshold ÷ Total Windows`
+  - **Source Metrics**: [`publish_latency_ms`](#metric-publish-latency) (custom metric)
 
-- <span id="sli-consumer-efficiency"></span>**Consumer Processing Efficiency**: Measures the processing speed of consumers to ensure they can handle the message volume without creating a backlog.
-  - **Formula**: p95 of `consumer_processing_time_ms`.
-  - **Source Metric**: [`consumer_processing_time_ms`](#metric-consumer-processing) (custom metric).
+- <span id="sli-consumer-efficiency"></span>**Consumer Processing Efficiency**: Ratio of 5-minute windows where p95 consumer processing time remains within acceptable thresholds to total windows measured.
+  - **Formula**: `Windows where p95(consumer_processing_time_ms) ≤ threshold ÷ Total Windows`
+  - **Source Metrics**: [`consumer_processing_time_ms`](#metric-consumer-processing) (custom metric)
 
-- <span id="sli-connection-headroom"></span>**Connection Headroom**: Measures the utilization of available connections to prevent service rejections due to connection limits.
-  - **Formula**: Percentage of active connections relative to the Premium tier limit (10,000 per PU).
-  - **Source Metric**: [`ActiveConnections`](#metric-active-connections) (from Azure Monitor).
+- <span id="sli-connection-headroom"></span>**Connection Headroom**: Ratio of available connections to total connection capacity for the Premium tier.
+  - **Source Metrics**: [`ActiveConnections`](#metric-active-connections) (from Azure Monitor)
 
 ## 5. Alerting Strategy
 
@@ -161,6 +160,7 @@ These alerts fire when an SLO is actively being violated or is predicted to be v
 | <span id="alert-latency-breach"></span>Publish Latency SLO Breach | [Publish Latency (Tail)](#slo-publish-latency) | p99 > [publish_latency_p99_ms](#var-publish-latency) | 10 min | High (Page) | Investigate network path, throttling, and retry configuration. |
 | <span id="alert-publish-success-breach"></span>Publish Success SLO Breach | [Publish Success](#slo-publish-success) | < 99.9% success | 15 min | Medium (Ticket) | **Catch-all for end-to-end publish failures.** Investigate client-side network issues, low-grade throttling, or other errors not caught by higher-priority alerts. |
 | <span id="alert-consumer-processing-breach"></span>Consumer Processing SLO Breach | [Consumer Processing Efficiency](#slo-consumer-efficiency) | p99 > [consumer_processing_p95_ms](#var-consumer-processing) | 15 min | Medium (Ticket) | **Early warning for growing lag.** Investigate consumer application performance. Check for slow downstream dependencies, inefficient code, or resource contention (CPU/memory). |
+| <span id="alert-connection-headroom"></span>Connection Headroom SLO Breach | [Connection Headroom](#slo-connection-headroom) | ≥ [connection_headroom_percent](#var-connection-headroom)% of limit | 15 min | High (Page) | Audit connection leaks, scale PUs, or rebalance clients. |
 
 **Risk-Based Alerts (Proactive Warnings)**
 
@@ -170,7 +170,6 @@ These alerts fire on metrics that indicate a potential future risk to an SLO, al
 | --- | --- | --- | --- | --- | --- |
 | <span id="alert-ingestion-halted"></span>Ingestion Halted by Throttling | [`SuccessfulRequests`](#metric-successful-requests) & [`ThrottledRequests`](#metric-throttled) | `sum(SuccessfulRequests) == 0` AND `sum(ThrottledRequests) > 0` | 5 min | High (Page) | Immediately scale PUs/partitions; investigate producer configuration. |
 | <span id="alert-heartbeat-missing"></span>Consumer Heartbeat Missing | [`consumer_heartbeat`](#metric-consumer-heartbeat) | No signal for `> (2 * [heartbeat_cadence_seconds](#var-heartbeat-cadence))`s | 5 min | High (Page) | Restore heartbeat pipeline; deploy custom lag metric if recurring. |
-| <span id="alert-connection-headroom"></span>Connection Headroom | [`ActiveConnections`](#metric-active-connections) | ≥ [connection_headroom_percent](#var-connection-headroom)% of limit | 15 min | High (Page) | Audit connection leaks, scale PUs, or rebalance clients. |
 | <span id="alert-producer-throttling"></span><span id="risk-sustained-throttling"></span>Producer Throttling | [`ThrottledRequests`](#metric-throttled) | > 1/s | 5 min | Medium (Ticket) | Scale PUs/partitions; adjust producer backoff; pre-warm namespaces. |
 | <span id="alert-predictive-lag"></span>Predictive Lag | [`Hₚ`](#formula-headroom) | < ([`cₚ`](#consumer-capacity) × 0.5) | 15 min | Low (Dashboard) | **Early warning for growing lag.** Consumer headroom is below 50% of capacity ([`cₚ`](#consumer-capacity)). Proactively scale up consumers or PUs before the headroom becomes negative and lag begins to grow. |
 | <span id="alert-lag-diagnostics"></span>Consumer Lag Diagnostics | [`ConsumerLag`](#metric-consumer-lag) | p99 > small thresholds | 10 min | Low (Dashboard) | Visual indicator for dashboard; no action required unless other alerts fire. |
@@ -298,6 +297,8 @@ The following metrics must be implemented within your application code and emitt
 - **Metric and Log Tagging**: To accelerate diagnostics, all logs and metrics should be tagged with consistent identifiers, including the Event Hubs namespace, partition ID, consumer group, and the specific workload or application name. This allows for rapid filtering and correlation across different telemetry types.
 - **Data Quality Guardrails**: Flag SLIs as having "degraded confidence" if the percentage of missing telemetry signals exceeds a predefined threshold. Enforce a maximum clock skew between clients and servers and alert when the percentage of producers emitting custom telemetry falls below the target coverage.
 - **Retry Policies**: While the Azure SDKs include robust retry policies, always confirm that your client-side configuration aligns with the assumptions in this design, particularly around retry windows and backoff strategies.
+- **Producer Resilience Patterns**: Consider implementing circuit breaker patterns with local buffering when Event Hubs is unavailable. This prevents data loss by temporarily storing events locally (disk, database) and automatically resuming publishing when the service recovers. For critical systems, evaluate the transactional outbox pattern to ensure atomicity between business operations and event publishing.
+- **Upstream Architecture Considerations**: Design upstream systems with resilience in mind. Consider event sourcing patterns where the source of truth includes the unpublished events, allowing for replay scenarios during extended outages. Implement bulkhead isolation to prevent cascade failures across different event streams.
 
 ## 9. Cost Guardrails & Optimization
 
