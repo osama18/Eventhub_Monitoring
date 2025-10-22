@@ -16,6 +16,8 @@
 
 This design is for a system on the Azure Event Hubs Premium tier. It assumes producers/consumers use SDKs, and each consumer instance is mapped to a single partition, using Azure Blob Storage for checkpointing.
 
+A key assumption of this design is the absence of "hot partitions." This means we presume that the data is distributed evenly across all partitions, without any single partition receiving a disproportionately large amount of traffic. This is typically achieved by using a partition key that ensures a balanced load. An unbalanced load, or "partition skew," can lead to localized performance bottlenecks that may not be visible when looking at the overall system metrics.
+
 ## 2. Key Risks & Mitigations
 
 This section is structured around the primary business risks. Each risk section outlines its causes and maps the alerts that act as warning signs or indicators of an actual occurrence.
@@ -38,6 +40,7 @@ This section is structured around the primary business risks. Each risk section 
 | **Critical Incident** | [Availability Burn Rate](#alert-availability-burn) | **Fast Burn:** The error budget is burning at a critical rate, indicating a major outage. <br> **Slow Burn:** A low-grade error has been sustained for hours, indicating sustained degradation. |
 | **Urgent Warning** | [Connection Headroom](#alert-connection-headroom) | The namespace is nearing its connection limit. New producers may soon be rejected, halting ingestion. |
 | **Degradation Warning** | [Producer Throttling](#alert-producer-throttling) | The system is under pressure. Producers are being slowed down, a leading indicator of potential saturation. |
+| **Degradation Warning** | [Publish Success SLO Breach](#alert-publish-success-breach) | A sustained failure of end-to-end publish operations can lead to data loss if retries are exhausted. |
 
 ---
 
@@ -54,6 +57,7 @@ This section is structured around the primary business risks. Each risk section 
 | Signal Classification | Alert Name & Link | Why it Matters |
 | :--- | :--- | :--- |
 | **Critical Incident** | [Publish Latency SLO Breach](#alert-latency-breach) | **The system is failing now.** The time to publish messages is actively breaching the SLO, causing immediate data staleness. |
+| **Degradation Warning** | [Publish Success SLO Breach](#alert-publish-success-breach) | Even if publishes eventually succeed, repeated failures and retries contribute directly to data staleness. |
 
 ---
 
@@ -83,23 +87,28 @@ SLOs are the internal targets set for our SLIs over a specific time window. They
 
 > _**Note**: The percentage-based objectives in this section (e.g., 99.9%) are common industry starting points. You should adjust these targets based on your specific business requirements, user expectations, and cost considerations._
 
-- <span id="slo-availability"></span>**Ingestion Availability**: Over a trailing 30-day period, the [Ingestion Availability SLI](#sli-availability) will be **≥ 99.9%** across rolling 5-minute windows.
-  > _This target aligns with the official Event Hubs Premium SLA and is the basis for [burn-rate alerting](#note-burn-rate)._
+- <span id="slo-availability"></span>**Ingestion Availability**: Over a trailing 30-day period, ingestion availability will be **≥ 99.9%** across rolling 5-minute windows.
+  - **Governing SLI**: [Ingestion Availability SLI](#sli-availability)
+  > _This target aligns with the official Event Hubs Premium SLA and is the basis for [burn-rate](#note-burn-rate)._
 
-- <span id="slo-backlog-freshness"></span>**Backlog Freshness**: Over a trailing 30-day period, at least **99%** of rolling 5-minute windows must satisfy:
-  - `p99(consumerLagInSeconds) ≤ [consumer_lag_seconds_threshold](#var-consumer-lag)`
-  > _This SLO defines the business requirement for data freshness. Compliance is measured indirectly by the [Backlog Freshness SLI](#sli-backlog-freshness), which uses a derived message count threshold (`Lₘ`) calculated from this time-based goal. See [Backlog Thresholds and Clearance](#backlog-thresholds) for the formula._
+- <span id="slo-backlog-freshness"></span>**Backlog Freshness**: Over a trailing 30-day period, at least **99%** of rolling 5-minute windows must satisfy p99(consumerLagInSeconds) ≤ [consumer_lag_seconds_threshold](#var-consumer-lag)
+  - **Governing SLI**: [Backlog Freshness SLI](#sli-backlog-freshness)
+  > _This SLO defines the business requirement for data freshness. Compliance is measured using a derived message count threshold (`Lₘ`) calculated from this time-based goal. See [Backlog Thresholds and Clearance](#backlog-thresholds) for the formula._
 
 - <span id="slo-publish-success"></span>**Publish Success**: Over a trailing 30-day period, at least **99.9%** of rolling 5-minute windows record publishes succeeding within `Wᵣ` seconds (retries included), where `Wᵣ` is the publish success retry window.
+  - **Governing SLI**: [Publish Success SLI](#sli-publish-success)
   > _A failure to meet this SLO often points to the [sustained throttling risk](#risk-sustained-throttling)._
 
 - <span id="slo-publish-latency"></span>**Publish Latency (Tail)**: Over a trailing 30-day period, at least **99.9%** of rolling 5-minute windows must maintain a p99 enqueue-to-ACK latency of **≤ [publish_latency_p99_ms](#var-publish-latency) ms**.
-  > _This SLO governs our tail latency budget. The p99 value is calculated after winsorizing outliers at `Lₐ` ms, where `Lₐ` is the latency cap for outliers._
+  > _**Governing SLI**: [Publish Latency (Tail) SLI](#sli-publish-latency)_
+  > _This SLO ensures that even the slowest 1% of publish operations complete within acceptable timeframes, preventing user-facing delays._
 
 - <span id="slo-consumer-efficiency"></span>**Consumer Processing Efficiency**: Over a trailing 30-day period, at least **99%** of rolling 5-minute windows must hold p95 consumer processing latency at **≤ [consumer_processing_p95_ms](#var-consumer-processing) ms**.
-  > _Excursions indicate throughput gaps that threaten data timeliness._
+  - **Governing SLI**: [Consumer Processing Efficiency SLI](#sli-consumer-efficiency)
+  > _Excursions indicate throughput gaps that threaten data timeliness and can be escalated to full evenhub saturation._
 
 - <span id="slo-connection-headroom"></span>**Connection Headroom**: Over a trailing 30-day period, at least **99%** of rolling 15-minute windows must keep active connections **≤ [connection_headroom_percent](#var-connection-headroom)%** of the Premium limit per PU.
+  - **Governing SLI**: [Connection Headroom SLI](#sli-connection-headroom)
   > _This SLO helps prevent client connection rejections._
 
 ## 4. Service Level Indicators (SLIs)
@@ -128,7 +137,7 @@ SLIs are user-centric indicators derived from the core metrics to measure servic
   - **Formula**: p95 of `consumer_processing_time_ms`.
   - **Source Metric**: [`consumer_processing_time_ms`](#metric-consumer-processing) (custom metric).
 
-- **Connection Headroom**: Measures the utilization of available connections to prevent service rejections due to connection limits.
+- <span id="sli-connection-headroom"></span>**Connection Headroom**: Measures the utilization of available connections to prevent service rejections due to connection limits.
   - **Formula**: Percentage of active connections relative to the Premium tier limit (10,000 per PU).
   - **Source Metric**: [`ActiveConnections`](#metric-active-connections) (from Azure Monitor).
 
@@ -150,6 +159,7 @@ These alerts fire when an SLO is actively being violated or is predicted to be v
 | <span id="alert-availability-burn"></span>Availability Burn Rate | [Ingestion Availability](#slo-availability) | **Fast Burn:** [Burn rate](#note-burn-rate) ≥ 57.6 over 15 min <br> **Slow Burn:** [Burn rate](#note-burn-rate) ≥ 6 over 6 hours | High (Page) | **Fast Burn indicates a critical outage.** The service is failing at a rate that will consume 2% of the monthly error budget in just 15 minutes. <br> **Slow Burn indicates sustained degradation.** The service has been failing at a low but persistent rate for 6 hours, consuming 5% of the monthly error budget. |
 | <span id="alert-backlog-breach"></span>Backlog Freshness SLO Breach | [Backlog Freshness](#slo-backlog-freshness) | `p99(ConsumerLag)` > [`Lₘ`](#backlog-thresholds) | 10 min | High (Page) | The message backlog has exceeded the calculated threshold `Lₘ`, which indicates a likely violation of the time-based freshness SLO. See [Backlog Thresholds](#backlog-thresholds) for calculation details. Increase consumer concurrency or optimize downstream dependencies. |
 | <span id="alert-latency-breach"></span>Publish Latency SLO Breach | [Publish Latency (Tail)](#slo-publish-latency) | p99 > [publish_latency_p99_ms](#var-publish-latency) | 10 min | High (Page) | Investigate network path, throttling, and retry configuration. |
+| <span id="alert-publish-success-breach"></span>Publish Success SLO Breach | [Publish Success](#slo-publish-success) | < 99.9% success | 15 min | Medium (Ticket) | **Catch-all for end-to-end publish failures.** Investigate client-side network issues, low-grade throttling, or other errors not caught by higher-priority alerts. |
 | <span id="alert-consumer-processing-breach"></span>Consumer Processing SLO Breach | [Consumer Processing Efficiency](#slo-consumer-efficiency) | p99 > [consumer_processing_p95_ms](#var-consumer-processing) | 15 min | Medium (Ticket) | **Early warning for growing lag.** Investigate consumer application performance. Check for slow downstream dependencies, inefficient code, or resource contention (CPU/memory). |
 
 **Risk-Based Alerts (Proactive Warnings)**
