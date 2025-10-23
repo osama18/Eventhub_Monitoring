@@ -22,8 +22,27 @@ Best for team collaboration and production environments. State is stored securel
 
 ## 📋 What Gets Deployed
 
-✅ **Log Analytics Workspace** - Stores diagnostic logs (PerGB2018, 30-day retention).  
-✅ **Diagnostic Setting** - Sends Event Hubs diagnostic logs to Log Analytics.
+The deployment supports multiple diagnostic log destinations. You can enable any combination:
+
+### 🔍 **Log Analytics Workspace** (Default: Enabled)
+- Stores diagnostic logs for querying with KQL
+- PerGB2018 pricing tier, 30-day retention
+- Ideal for: Real-time monitoring, alerting, dashboards
+
+### 📦 **Storage Account** (Default: Disabled)
+- Archives diagnostic logs for long-term retention
+- Standard LRS storage with blob lifecycle policies
+- Ideal for: Compliance, cost-effective long-term storage
+
+### 🔄 **Event Hub Streaming** (Default: Disabled)
+- Real-time streaming of diagnostic logs
+- Creates dedicated `diagnostic-logs` Event Hub
+- Ideal for: Custom processing, external systems, real-time analytics
+
+**Note:** At least one destination must be enabled. Common patterns:
+- **Basic**: Log Analytics only
+- **Compliance**: Log Analytics + Storage Account
+- **Advanced**: All three destinations for comprehensive observability
 
 ## 🛠️ Manual Terraform Commands
 
