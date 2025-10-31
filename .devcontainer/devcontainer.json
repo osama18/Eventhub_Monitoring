@@ -1,0 +1,17 @@
+{
+    "name": "Eventhub_Monitoring",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "hashicorp.terraform",
+                "ms-vscode.azure-account",
+                "ms-azuretools.vscode-azureterraform"
+            ]
+        }
+    },
+    "postCreateCommand": "terraform --version && az --version",
+    "remoteUser": "vscode"
+}
